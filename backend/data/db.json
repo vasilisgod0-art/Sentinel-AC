@@ -1,0 +1,16 @@
+{
+  "players": [],
+  "alerts": [],
+  "bans": [],
+  "config": {
+    "enableBan": true,
+    "banDuration": 86400000,
+    "suspicionThreshold": 100,
+    "checkInterval": 5000,
+    "allowedWeapons": [
+      "WEAPON_PISTOL",
+      "WEAPON_COMBATPISTOL",
+      "WEAPON_SMG"
+    ]
+  }
+}

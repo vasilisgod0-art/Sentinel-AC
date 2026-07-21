@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: sentinel-dashboard
+    env: node
+    plan: free
+    branch: main
+    buildCommand: cd backend && npm install
+    startCommand: cd backend && npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
