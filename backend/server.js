@@ -128,6 +128,11 @@ app.get('/api/health', async (req, res) => {
   res.json({ status: 'healthy' });
 });
 
+// Serve index.html for all non-API routes (SPA routing)
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'frontend', 'index.html'));
+});
+
 app.listen(port, async () => {
   try {
     await initDb();
