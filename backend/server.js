@@ -17,7 +17,7 @@ const db = new Low(adapter);
 let indexHtml = '';
 function loadIndexHtml() {
   try {
-    const indexPath = path.resolve(__dirname, '..', '..', 'frontend', 'index.html');
+    const indexPath = path.resolve(__dirname, '..', 'frontend', 'index.html');
     indexHtml = fs.readFileSync(indexPath, 'utf-8');
     console.log('Loaded index.html from:', indexPath);
   } catch (err) {
@@ -57,7 +57,7 @@ async function initDb() {
 
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, '..', '..', 'frontend')));
+app.use(express.static(path.join(__dirname, '..', 'frontend')));
 
 app.get('/api/status', async (req, res) => {
   await db.read();
