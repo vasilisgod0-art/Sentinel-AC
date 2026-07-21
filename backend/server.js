@@ -129,6 +129,11 @@ app.get('/api/health', async (req, res) => {
 });
 
 app.listen(port, async () => {
-  await initDb();
-  console.log(`Sentinel backend running on http://localhost:${port}`);
+  try {
+    await initDb();
+    console.log(`Sentinel backend running on port ${port}`);
+  } catch (err) {
+    console.error('Failed to start server:', err);
+    process.exit(1);
+  }
 });
