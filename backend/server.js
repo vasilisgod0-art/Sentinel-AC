@@ -4,6 +4,7 @@ const cors = require('cors');
 const { Low } = require('lowdb');
 const { JSONFile } = require('lowdb/node');
 const { nanoid } = require('nanoid');
+const fs = require('fs');
 
 const app = express();
 const port = process.env.PORT || 4000;
@@ -11,6 +12,31 @@ const port = process.env.PORT || 4000;
 const dbFile = path.join(__dirname, 'data', 'db.json');
 const adapter = new JSONFile(dbFile);
 const db = new Low(adapter);
+
+// Cache index.html at startup
+let indexHtml = '';
+function loadIndexHtml() {
+  try {
+    const indexPath = path.resolve(__dirname, '..', 'frontend', 'index.html');
+    indexHtml = fs.readFileSync(indexPath, 'utf-8');
+    console.log('Loaded index.html from:', indexPath);
+  } catch (err) {
+    console.warn('Could not load index.html, will use fallback');
+    indexHtml = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sentinel AC</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div id="app"></div>
+  <script src="/app.js"></script>
+</body>
+</html>`;
+  }
+}
 
 async function initDb() {
   await db.read();
@@ -130,11 +156,12 @@ app.get('/api/health', async (req, res) => {
 
 // Serve index.html for all non-API routes (SPA routing)
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '..', 'frontend', 'index.html'));
+  res.type('text/html').send(indexHtml);
 });
 
 app.listen(port, async () => {
   try {
+    loadIndexHtml();
     await initDb();
     console.log(`Sentinel backend running on port ${port}`);
   } catch (err) {
