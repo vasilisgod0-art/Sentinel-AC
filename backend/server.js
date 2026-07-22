@@ -250,6 +250,17 @@ app.post('/api/moderation/kick', authMiddleware, async (req, res) => {
   res.json({ success: true });
 });
 
+app.post('/api/moderation/unban', authMiddleware, async (req, res) => {
+  const { banId, playerId, playerName } = req.body;
+  await db.read();
+  if (banId) db.data.bans = db.data.bans.filter(b => b.id !== banId);
+  const player = db.data.players.find(p => p.id === playerId);
+  if (player) player.status = 'offline';
+  db.data.actions.unshift({ id: nanoid(), type: 'unban', playerId, playerName: playerName || playerId, reason: 'Unbanned by admin', actor: req.user.username, timestamp: Date.now() });
+  await db.write();
+  res.json({ success: true });
+});
+
 app.get('/api/health', async (req, res) => {
   res.json({ status: 'healthy' });
 });
