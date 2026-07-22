@@ -12,5 +12,14 @@
       "WEAPON_COMBATPISTOL",
       "WEAPON_SMG"
     ]
-  }
+  },
+  "users": [
+    {
+      "id": "Tpi5ISSYJVco1DKW3xi--",
+      "username": "admin",
+      "password": "0e8c0ba602c5fc70101f0df6339e4188ec5593f08f57449288705d736a585508",
+      "role": "admin"
+    }
+  ],
+  "actions": []
 }

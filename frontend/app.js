@@ -41,8 +41,8 @@ async function fetchApi(path, options = {}) {
 
 async function handleLogin(e) {
   e.preventDefault();
-  const username = document.querySelector('input[name="username"]').value;
-  const password = document.querySelector('input[name="password"]').value;
+  const username = e.target.querySelector('input[name="username"]').value;
+  const password = e.target.querySelector('input[name="password"]').value;
   
   try {
     const data = await fetchApi('/api/auth/login', {
@@ -211,9 +211,9 @@ function renderRegisterPage() {
         className: 'auth-form',
         onsubmit: async (e) => {
           e.preventDefault();
-          const username = document.querySelector('input[name="username"]').value;
-          const password = document.querySelector('input[name="password"]').value;
-          const confirmPassword = document.querySelector('input[name="confirmPassword"]').value;
+          const username = e.target.querySelector('input[name="username"]').value;
+          const password = e.target.querySelector('input[name="password"]').value;
+          const confirmPassword = e.target.querySelector('input[name="confirmPassword"]').value;
           
           if (password !== confirmPassword) {
             alert('Passwords do not match');
@@ -221,15 +221,14 @@ function renderRegisterPage() {
           }
           
           try {
-            await fetchApi('/api/auth/register', {
+            const data = await fetchApi('/api/auth/register', {
               method: 'POST',
               body: JSON.stringify({ username, password })
             });
-            alert('Account created! Logging in...');
-            const loginForm = document.createElement('form');
-            const event = new Event('submit', { cancelable: true });
-            loginForm.dispatchEvent(event);
-            await handleLogin({ preventDefault: () => {} });
+            state.token = data.token;
+            state.user = data.user;
+            localStorage.setItem('token', state.token);
+            loadDashboard();
           } catch (err) {
             alert('Registration failed: ' + err.message);
           }
