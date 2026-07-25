@@ -90,6 +90,17 @@ If you want a free public URL without buying a server, you can use Render.com:
 
 Render will host the backend and static frontend together if you keep the current Express static file setup.
 
+### Deployment with Railway
+
+Railway also works with this repo now because the root project includes a Node entrypoint and a Dockerfile.
+
+1. Create a Railway project and connect this GitHub repository.
+2. Let Railway detect the Dockerfile in the project root.
+3. Deploy the service.
+4. Open the generated Railway domain from the project dashboard.
+
+If you need to redeploy after changes, push to `main` and Railway will rebuild automatically.
+
 Example Nginx proxy block:
 
 ```nginx
