@@ -44,6 +44,7 @@ const app = express();
 const port = process.env.PORT || 4000;
 
 const dbFile = path.join(__dirname, 'data', 'db.json');
+fs.mkdirSync(path.dirname(dbFile), { recursive: true });
 const adapter = new JSONFile(dbFile);
 const db = new Low(adapter);
 
