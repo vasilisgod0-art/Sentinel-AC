@@ -8,6 +8,11 @@ const fs = require('fs');
 const crypto = require('crypto');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'sentinel-secret-key-change-in-production';
+const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID || '';
+const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || '';
+const DISCORD_REDIRECT_URI = process.env.DISCORD_REDIRECT_URI || '';
+const DISCORD_INVITE_URL = process.env.DISCORD_INVITE_URL || '';
+const LICENSE_PURCHASE_URL = process.env.LICENSE_PURCHASE_URL || '';
 
 function hashPassword(password) {
   return crypto.createHmac('sha256', JWT_SECRET).update(password).digest('hex');
@@ -38,6 +43,50 @@ function authMiddleware(req, res, next) {
   if (!payload) return res.status(401).json({ error: 'Invalid or expired token' });
   req.user = payload;
   next();
+}
+
+function discordAuthUrl() {
+  if (!DISCORD_CLIENT_ID || !DISCORD_REDIRECT_URI) return null;
+  const params = new URLSearchParams({
+    client_id: DISCORD_CLIENT_ID,
+    redirect_uri: DISCORD_REDIRECT_URI,
+    response_type: 'code',
+    scope: 'identify email'
+  });
+  return `https://discord.com/api/oauth2/authorize?${params.toString()}`;
+}
+
+async function discordUserFromCode(code) {
+  if (!DISCORD_CLIENT_ID || !DISCORD_CLIENT_SECRET || !DISCORD_REDIRECT_URI) {
+    throw new Error('Discord OAuth is not configured');
+  }
+
+  const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: DISCORD_CLIENT_ID,
+      client_secret: DISCORD_CLIENT_SECRET,
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: DISCORD_REDIRECT_URI
+    })
+  });
+
+  if (!tokenResponse.ok) {
+    throw new Error('Failed to exchange Discord code');
+  }
+
+  const tokenData = await tokenResponse.json();
+  const profileResponse = await fetch('https://discord.com/api/users/@me', {
+    headers: { Authorization: `Bearer ${tokenData.access_token}` }
+  });
+
+  if (!profileResponse.ok) {
+    throw new Error('Failed to read Discord profile');
+  }
+
+  return profileResponse.json();
 }
 
 const app = express();
@@ -94,7 +143,7 @@ async function initDb() {
   db.data.actions ||= [];
   // Seed default admin if no users exist
   if (db.data.users.length === 0) {
-    db.data.users.push({ id: nanoid(), username: 'admin', password: hashPassword('Admin123!'), role: 'admin' });
+    db.data.users.push({ id: nanoid(), username: 'admin', password: hashPassword('Admin123!'), role: 'admin', licenseStatus: 'active', authProvider: 'local' });
     console.log('Seeded default admin user: admin / Admin123!');
   }
   await db.write();
@@ -107,6 +156,86 @@ app.use(express.static(path.join(__dirname, '..', 'frontend')));
 app.get('/api/status', async (req, res) => {
   await db.read();
   res.json({ status: 'ok', version: '1.0.0' });
+});
+
+app.get('/api/license', authMiddleware, async (req, res) => {
+  await db.read();
+  const user = db.data.users.find((item) => item.id === req.user.id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  res.json({
+    licenseStatus: user.licenseStatus || 'pending',
+    authProvider: user.authProvider || 'local',
+    discordUsername: user.discordUsername || null,
+    discordId: user.discordId || null,
+    purchaseUrl: LICENSE_PURCHASE_URL || null,
+    inviteUrl: DISCORD_INVITE_URL || null
+  });
+});
+
+app.get('/api/auth/discord/url', (req, res) => {
+  const url = discordAuthUrl();
+  if (!url) {
+    return res.status(400).json({ error: 'Discord OAuth is not configured' });
+  }
+  res.json({ url });
+});
+
+app.get('/api/public/site-config', (req, res) => {
+  res.json({
+    discordInviteUrl: DISCORD_INVITE_URL || null,
+    licensePurchaseUrl: LICENSE_PURCHASE_URL || null,
+    discordOAuthConfigured: Boolean(DISCORD_CLIENT_ID && DISCORD_CLIENT_SECRET && DISCORD_REDIRECT_URI)
+  });
+});
+
+app.get('/auth/discord', (req, res) => {
+  const url = discordAuthUrl();
+  if (!url) {
+    return res.status(400).send('Discord OAuth is not configured. Set DISCORD_CLIENT_ID and DISCORD_REDIRECT_URI.');
+  }
+  res.redirect(url);
+});
+
+app.get('/auth/discord/callback', async (req, res) => {
+  try {
+    const code = req.query.code;
+    if (!code) return res.status(400).send('Missing Discord code');
+
+    const discordProfile = await discordUserFromCode(code);
+
+    await db.read();
+    let user = db.data.users.find((item) => item.discordId === discordProfile.id);
+    if (!user) {
+      user = {
+        id: nanoid(),
+        username: discordProfile.username || discordProfile.global_name || `discord_${discordProfile.id.slice(0, 6)}`,
+        discordId: discordProfile.id,
+        discordUsername: discordProfile.username || discordProfile.global_name || null,
+        password: null,
+        role: 'member',
+        authProvider: 'discord',
+        licenseStatus: 'pending',
+        createdAt: Date.now()
+      };
+      db.data.users.push(user);
+    } else {
+      user.discordUsername = discordProfile.username || discordProfile.global_name || user.discordUsername;
+      user.authProvider = 'discord';
+    }
+
+    await db.write();
+
+    const token = generateToken(user);
+    const payload = Buffer.from(JSON.stringify({
+      token,
+      user: { id: user.id, username: user.username, role: user.role, authProvider: user.authProvider, licenseStatus: user.licenseStatus || 'pending' }
+    })).toString('base64');
+
+    res.redirect(`/#discord=${encodeURIComponent(payload)}`);
+  } catch (error) {
+    console.error('Discord callback failed:', error);
+    res.status(500).send('Discord login failed');
+  }
 });
 
 app.get('/api/config', authMiddleware, async (req, res) => {
@@ -207,7 +336,7 @@ app.post('/api/auth/register', async (req, res) => {
   db.data.users.push(user);
   await db.write();
   const token = generateToken(user);
-  res.status(201).json({ token, user: { id: user.id, username: user.username, role: user.role } });
+  res.status(201).json({ token, user: { id: user.id, username: user.username, role: user.role, authProvider: 'local', licenseStatus: user.licenseStatus || 'pending' } });
 });
 
 app.post('/api/auth/login', async (req, res) => {
@@ -217,7 +346,22 @@ app.post('/api/auth/login', async (req, res) => {
   const user = db.data.users.find(u => u.username === username && u.password === hashPassword(password));
   if (!user) return res.status(401).json({ error: 'Invalid username or password' });
   const token = generateToken(user);
-  res.json({ token, user: { id: user.id, username: user.username, role: user.role } });
+  res.json({ token, user: { id: user.id, username: user.username, role: user.role, authProvider: user.authProvider || 'local', licenseStatus: user.licenseStatus || 'pending' } });
+});
+
+app.get('/api/me', authMiddleware, async (req, res) => {
+  await db.read();
+  const user = db.data.users.find((item) => item.id === req.user.id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  res.json({
+    id: user.id,
+    username: user.username,
+    role: user.role,
+    authProvider: user.authProvider || 'local',
+    licenseStatus: user.licenseStatus || 'pending',
+    discordUsername: user.discordUsername || null,
+    discordId: user.discordId || null
+  });
 });
 
 // ============ ACTIONS ============

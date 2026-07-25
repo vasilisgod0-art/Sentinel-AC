@@ -4,7 +4,9 @@ const state = {
   user: null,
   token: localStorage.getItem('sentinel_token') || null,
   players: [], alerts: [], bans: [], actions: [], config: {},
-  alertCount: 0
+  alertCount: 0,
+  license: null,
+  siteConfig: { discordInviteUrl: null, licensePurchaseUrl: null, discordOAuthConfigured: false }
 };
 
 function el(tag, attrs = {}, ...children) {
@@ -31,6 +33,51 @@ async function api(path, opts = {}) {
   return r.json();
 }
 
+async function loadPublicConfig() {
+  try {
+    state.siteConfig = await api('/api/public/site-config');
+  } catch (error) {
+    state.siteConfig = { discordInviteUrl: null, licensePurchaseUrl: null, discordOAuthConfigured: false };
+    console.warn('Public site config unavailable:', error);
+  }
+}
+
+function decodeDiscordSessionFromHash() {
+  const raw = window.location.hash.replace(/^#discord=/, '');
+  if (!window.location.hash.startsWith('#discord=') || !raw) return null;
+  try {
+    const decoded = JSON.parse(atob(decodeURIComponent(raw)));
+    window.location.hash = '';
+    return decoded;
+  } catch (error) {
+    console.warn('Invalid Discord session hash:', error);
+    window.location.hash = '';
+    return null;
+  }
+}
+
+async function handleDiscordLogin() {
+  try {
+    const result = await api('/api/auth/discord/url');
+    window.location.href = result.url;
+  } catch (error) {
+    alert('Discord login is not configured yet. Add Discord OAuth env vars first.');
+  }
+}
+
+function renderPublicCTA(title, description, buttonLabel, onClick, secondaryLabel, secondaryClick) {
+  return el('div', { className: 'public-cta-card' },
+    el('div', { className: 'public-cta-copy' },
+      el('div', { className: 'public-cta-title' }, title),
+      el('div', { className: 'public-cta-desc' }, description)
+    ),
+    el('div', { className: 'public-cta-actions' },
+      el('button', { className: 'btn btn-primary', onclick: onClick }, buttonLabel),
+      secondaryLabel ? el('button', { className: 'btn btn-ghost', onclick: secondaryClick }, secondaryLabel) : null
+    )
+  );
+}
+
 function timeAgo(ts) {
   const d = Date.now() - ts;
   if (d < 60000) return 'just now';
@@ -54,35 +101,110 @@ function alertSeverity(pts) {
 // ── AUTH PAGES ──
 function renderLogin() {
   document.getElementById('app').innerHTML = '';
-  const form = el('div', { className: 'auth-page' },
-    el('div', { className: 'auth-left' },
-      el('div', { className: 'auth-left-logo' },
-        el('div', { className: 'logo-icon' }, '⚔️'),
-        el('h2', {}, 'Sentinel AC')
+  const page = el('div', { className: 'public-landing' },
+    el('section', { className: 'public-hero' },
+      el('div', { className: 'public-hero-copy' },
+        el('div', { className: 'eyebrow-pill' }, 'Discord-first licensing for FiveM servers'),
+        el('h1', {}, 'Launch a premium anti-cheat portal with Discord login and license checkout.'),
+        el('p', {}, 'Sentinel AC now has a real public experience: Discord authentication, licensing controls, module coverage, and a dashboard that feels like a product instead of a toy.'),
+        el('div', { className: 'public-hero-actions' },
+          el('button', { className: 'btn btn-primary btn-xl', onclick: handleDiscordLogin }, 'Continue with Discord'),
+          el('button', { className: 'btn btn-ghost btn-xl', onclick: () => window.scrollTo({ top: document.getElementById('pricing').offsetTop - 20, behavior: 'smooth' }) }, 'View License Plans')
+        ),
+        el('div', { className: 'public-meta-row' },
+          el('div', { className: 'public-meta-card' }, el('strong', {}, 'OAuth'), el('span', {}, state.siteConfig.discordOAuthConfigured ? 'Configured' : 'Needs setup')),
+          el('div', { className: 'public-meta-card' }, el('strong', {}, 'Licensing'), el('span', {}, state.siteConfig.licensePurchaseUrl ? 'Checkout ready' : 'Invite or checkout URL missing')),
+          el('div', { className: 'public-meta-card' }, el('strong', {}, 'Modules'), el('span', {}, '5 active detections'))
+        )
       ),
-      el('h1', {}, 'The most advanced FiveM anticheat platform'),
-      el('p', {}, 'Monitor, detect, and eliminate cheaters in real-time. Protect your FiveM server with enterprise-grade security tools.'),
-      el('div', { className: 'feature-list' },
-        el('div', { className: 'feature-item' }, el('span', { className: 'feature-icon' }, '🛡️'), 'Real-time godmode & speed detection'),
-        el('div', { className: 'feature-item' }, el('span', { className: 'feature-icon' }, '🔫'), 'Illegal weapon monitoring'),
-        el('div', { className: 'feature-item' }, el('span', { className: 'feature-icon' }, '⚡'), 'Teleport & position spoofing'),
-        el('div', { className: 'feature-item' }, el('span', { className: 'feature-icon' }, '👁️'), 'Invisibility & invincibility checks'),
-        el('div', { className: 'feature-item' }, el('span', { className: 'feature-icon' }, '🔨'), 'One-click ban & kick actions')
+      el('div', { className: 'public-hero-side' },
+        el('div', { className: 'public-hero-preview' },
+          el('div', { className: 'preview-top' },
+            el('span', { className: 'preview-dot' }), el('span', { className: 'preview-dot' }), el('span', { className: 'preview-dot' }),
+            el('span', { className: 'preview-label' }, 'Live preview')
+          ),
+          el('div', { className: 'preview-metric' }, '247'),
+          el('div', { className: 'preview-caption' }, 'Players protected today'),
+          el('div', { className: 'preview-grid' },
+            el('div', { className: 'preview-tile tile-1' }, el('strong', {}, 'Discord Login'), el('span', {}, 'OAuth flow')),
+            el('div', { className: 'preview-tile tile-2' }, el('strong', {}, 'License Gate'), el('span', {}, 'Buy / verify')),
+            el('div', { className: 'preview-tile tile-3' }, el('strong', {}, 'Ban Queue'), el('span', {}, 'One-click actions')),
+            el('div', { className: 'preview-tile tile-4' }, el('strong', {}, 'Modules'), el('span', {}, '5 detections'))
+          )
+        )
       )
     ),
-    el('div', { className: 'auth-right' },
-      el('h2', { className: 'auth-title' }, 'Welcome back'),
-      el('p', { className: 'auth-subtitle' }, 'Sign in to your dashboard'),
-      el('form', { onsubmit: doLogin },
-        el('div', { className: 'form-field' }, el('label', {}, 'Username'), el('input', { type: 'text', name: 'username', placeholder: 'Enter username', required: true })),
-        el('div', { className: 'form-field' }, el('label', {}, 'Password'), el('input', { type: 'password', name: 'password', placeholder: 'Enter password', required: true })),
-        el('button', { type: 'submit', className: 'btn btn-primary' }, '🔑 Sign In')
+    el('section', { className: 'feature-band' },
+      el('div', { className: 'feature-band-card' }, el('span', {}, '🛡️'), el('strong', {}, 'Real-time detection'), el('p', {}, 'Teleport, speed, weapon, invisibility, and godmode checks.')),
+      el('div', { className: 'feature-band-card' }, el('span', {}, '💬'), el('strong', {}, 'Discord onboarding'), el('p', {}, 'Users log in with Discord and get a guided license flow.')),
+      el('div', { className: 'feature-band-card' }, el('span', {}, '💳'), el('strong', {}, 'License checkout'), el('p', {}, 'Connect a purchase URL or Discord storefront for access.')),
+      el('div', { className: 'feature-band-card' }, el('span', {}, '📊'), el('strong', {}, 'Admin dashboard'), el('p', {}, 'Review alerts, actions, bans, and server health in one place.'))
+    ),
+    el('section', { className: 'content-section', id: 'pricing' },
+      el('div', { className: 'section-heading' },
+        el('span', { className: 'section-kicker' }, 'Plans'),
+        el('h2', {}, 'Choose the license tier you want to sell'),
+        el('p', {}, 'These cards are built so you can swap the buttons to your Discord checkout, Stripe link, or license portal.')
       ),
-      el('div', { className: 'auth-switch' }, "Don't have an account? ", el('a', { href: '#', onclick: (e) => { e.preventDefault(); renderRegister(); } }, 'Create one')),
-      el('div', { className: 'demo-badge' }, el('strong', {}, '🎮 Demo: '), 'admin / Admin123!')
+      el('div', { className: 'pricing-grid' },
+        licenseCard('Starter', '$15', 'For small servers', ['Discord login', 'Basic detection modules', 'Dashboard access'], 'Get Started', handleDiscordLogin),
+        licenseCard('Pro', '$35', 'Most popular', ['Advanced alerts', 'Ban / kick tools', 'License verification'], 'Buy Pro', () => openLicenseUrl()),
+        licenseCard('Enterprise', '$79', 'For larger communities', ['Priority support', 'Custom rules', 'Multi-server setup'], 'Contact Sales', () => openDiscordInvite())
+      )
+    ),
+    el('section', { className: 'content-section' },
+      el('div', { className: 'section-heading' },
+        el('span', { className: 'section-kicker' }, 'Why Sentinel'),
+        el('h2', {}, 'A bigger product page, not a plain login form'),
+        el('p', {}, 'This layout gives you a marketing site, a Discord sign-in path, and a license wall before the dashboard opens.')
+      ),
+      el('div', { className: 'feature-gallery' },
+        galleryCard('01', 'Discord identity', 'Your customers authenticate with their Discord account and land in a branded onboarding flow.', 'discord-bg'),
+        galleryCard('02', 'License purchase', 'Send buyers to a checkout link or Discord storefront, then verify access inside the app.', 'license-bg'),
+        galleryCard('03', 'Admin controls', 'After access is granted, the moderation dashboard appears with ban, kick, logs, and detections.', 'dashboard-bg')
+      )
     )
   );
-  document.getElementById('app').appendChild(form);
+
+  document.getElementById('app').appendChild(page);
+}
+
+const renderLanding = renderLogin;
+
+function licenseCard(title, price, subtitle, bullets, buttonText, buttonAction) {
+  return el('div', { className: 'pricing-card' },
+    el('div', { className: 'pricing-top' },
+      el('h3', {}, title),
+      el('div', { className: 'pricing-price' }, price),
+      el('p', {}, subtitle)
+    ),
+    el('ul', { className: 'pricing-list' }, ...bullets.map((item) => el('li', {}, item))),
+    el('button', { className: 'btn btn-primary', onclick: buttonAction }, buttonText)
+  );
+}
+
+function galleryCard(index, title, description, themeClass) {
+  return el('div', { className: `gallery-card ${themeClass}` },
+    el('div', { className: 'gallery-index' }, index),
+    el('h3', {}, title),
+    el('p', {}, description)
+  );
+}
+
+function openLicenseUrl() {
+  if (state.siteConfig.licensePurchaseUrl) {
+    window.open(state.siteConfig.licensePurchaseUrl, '_blank', 'noopener,noreferrer');
+    return;
+  }
+  alert('No license purchase URL is configured yet. Set LICENSE_PURCHASE_URL on the server.');
+}
+
+function openDiscordInvite() {
+  if (state.siteConfig.discordInviteUrl) {
+    window.open(state.siteConfig.discordInviteUrl, '_blank', 'noopener,noreferrer');
+    return;
+  }
+  alert('No Discord invite URL is configured yet. Set DISCORD_INVITE_URL on the server.');
 }
 
 function renderRegister() {
@@ -123,9 +245,7 @@ async function doLogin(e) {
   btn.textContent = 'Signing in...'; btn.disabled = true;
   try {
     const d = await api('/api/auth/login', { method: 'POST', body: JSON.stringify({ username: e.target.username.value, password: e.target.password.value }) });
-    state.token = d.token; state.user = d.user;
-    localStorage.setItem('sentinel_token', d.token);
-    await loadAll(); renderApp();
+    await applySession(d);
   } catch(err) { alert('Login failed: ' + err.message); btn.textContent = '🔑 Sign In'; btn.disabled = false; }
 }
 
@@ -136,10 +256,17 @@ async function doRegister(e) {
   btn.textContent = 'Creating...'; btn.disabled = true;
   try {
     const d = await api('/api/auth/register', { method: 'POST', body: JSON.stringify({ username: e.target.username.value, password: e.target.password.value }) });
-    state.token = d.token; state.user = d.user;
-    localStorage.setItem('sentinel_token', d.token);
-    await loadAll(); renderApp();
+    await applySession(d);
   } catch(err) { alert('Registration failed: ' + err.message); btn.textContent = '🚀 Create Account'; btn.disabled = false; }
+}
+
+async function applySession(session) {
+  state.token = session.token;
+  state.user = session.user;
+  state.license = { licenseStatus: session.user?.licenseStatus || 'pending' };
+  localStorage.setItem('sentinel_token', session.token);
+  await loadAll();
+  renderAuthenticatedView();
 }
 
 async function loadAll() {
@@ -149,7 +276,20 @@ async function loadAll() {
     ]);
     state.players = players || []; state.alerts = alerts || [];
     state.bans = bans || []; state.actions = actions || []; state.config = config || {};
+    try {
+      state.license = await api('/api/license');
+    } catch (licenseError) {
+      state.license = { licenseStatus: 'pending' };
+    }
   } catch(e) { console.error('loadAll error:', e); }
+}
+
+async function renderAuthenticatedView() {
+  if ((state.license?.licenseStatus || 'pending') !== 'active' && state.user?.authProvider === 'discord') {
+    renderLicenseWall();
+    return;
+  }
+  renderApp();
 }
 
 // ── APP SHELL ──
@@ -265,6 +405,41 @@ function doLogout() {
   localStorage.removeItem('sentinel_token');
   state.token = null; state.user = null; state.page = 'login';
   renderLogin();
+}
+
+function renderLicenseWall() {
+  const app = document.getElementById('app');
+  app.innerHTML = '';
+  const inviteText = state.siteConfig.discordInviteUrl ? 'Join Discord' : 'Configure Discord Invite';
+  const purchaseText = state.siteConfig.licensePurchaseUrl ? 'Buy License' : 'Configure Purchase Link';
+
+  const wall = el('div', { className: 'license-wall' },
+    el('div', { className: 'license-wall-card' },
+      el('div', { className: 'license-wall-badge' }, 'License required'),
+      el('h1', {}, 'Your Discord account is connected, but access is still locked.'),
+      el('p', {}, 'This is the license gate. Connect your payment link or Discord storefront so new users can buy access before entering the dashboard.'),
+      el('div', { className: 'license-status-grid' },
+        el('div', { className: 'license-status-item' }, el('strong', {}, 'Auth'), el('span', {}, state.user?.authProvider || 'discord')),
+        el('div', { className: 'license-status-item' }, el('strong', {}, 'License'), el('span', {}, state.license?.licenseStatus || 'pending')),
+        el('div', { className: 'license-status-item' }, el('strong', {}, 'Discord'), el('span', {}, state.license?.discordUsername || state.user?.username || 'Connected'))
+      ),
+      el('div', { className: 'license-wall-actions' },
+        el('button', { className: 'btn btn-primary btn-xl', onclick: openLicenseUrl }, purchaseText),
+        el('button', { className: 'btn btn-ghost btn-xl', onclick: openDiscordInvite }, inviteText),
+        el('button', { className: 'btn btn-ghost btn-xl', onclick: async () => { await loadAll(); renderAuthenticatedView(); } }, 'I already bought a license')
+      ),
+      renderPublicCTA(
+        'Need help activating?',
+        'If you are testing this locally, configure DISCORD_INVITE_URL and LICENSE_PURCHASE_URL on the server to make these buttons work.',
+        'Refresh status',
+        async () => { await loadAll(); renderAuthenticatedView(); },
+        'Back to landing',
+        () => { state.token = null; state.user = null; localStorage.removeItem('sentinel_token'); renderLogin(); }
+      )
+    )
+  );
+
+  app.appendChild(wall);
 }
 
 // ── OVERVIEW PAGE ──
@@ -671,17 +846,24 @@ async function doUnbanById(ban) {
 
 // ── INIT ──
 async function init() {
+  const discordSession = decodeDiscordSessionFromHash();
+  if (discordSession?.token) {
+    await applySession(discordSession);
+    return;
+  }
+
   if (state.token) {
     try {
       await loadAll();
       state.page = 'overview';
-      renderApp();
+      renderAuthenticatedView();
     } catch(e) {
       localStorage.removeItem('sentinel_token');
       state.token = null;
       renderLogin();
     }
   } else {
+    await loadPublicConfig();
     renderLogin();
   }
 }

@@ -101,6 +101,18 @@ Railway also works with this repo now because the root project includes a Node e
 
 If you need to redeploy after changes, push to `main` and Railway will rebuild automatically.
 
+### Discord login and license gating
+
+To enable Discord login and the license purchase buttons, set these environment variables on your host:
+
+- `DISCORD_CLIENT_ID`
+- `DISCORD_CLIENT_SECRET`
+- `DISCORD_REDIRECT_URI`
+- `DISCORD_INVITE_URL`
+- `LICENSE_PURCHASE_URL`
+
+Without those values the site still loads, but the Discord login and purchase buttons will show a setup message instead of redirecting.
+
 Example Nginx proxy block:
 
 ```nginx
